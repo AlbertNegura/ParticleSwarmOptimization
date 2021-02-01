@@ -3,39 +3,57 @@
 # Run this app with `python webapp.py` and
 # visit http://127.0.0.1:8050/ in your web browser.
 
-import dash
-import dash_core_components as dcc
-import dash_html_components as html
-import plotly.express as px
+import numpy as np
 import pandas as pd
+import random
+from holoviews import opts, dim
+import holoviews as hv
+import panel as pn
+from holoviews.streams import Stream
 import particle_swarm_optimization as pso
+hv.extension('bokeh', logo=False)
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+def generate_data(swarmsize = 100, iterations = 100, dimensions = 2, rand_init = False, omega = 0.5, c1 = 0.5, c2 = 0.5, T1 = 1e-10, T2 = 1e-10, CONVERGENCE = False, DEBUG = False, PROCESSES = 1, function = 0):
+    particle_swarm = pso.PSO(swarmsize = 100, iterations = 100, dimensions = 2, rand_init = False, omega = 0.5, c1 = 0.5, c2 = 0.5, T1 = 1e-10, T2 = 1e-10, CONVERGENCE = False, DEBUG = False, PROCESSES = 1, function = 0)
+    particle_swarm.pso()
 
-# assume you have a "long-form" data frame
-# see https://plotly.com/python/px-arguments/ for more options
-df = pd.DataFrame({
-    "Fruit": ["Apples", "Oranges", "Bananas", "Apples", "Oranges", "Bananas"],
-    "Amount": [4, 1, 2, 2, 4, 5],
-    "City": ["SF", "SF", "SF", "Montreal", "Montreal", "Montreal"]
-})
+    return particle_swarm
 
-fig = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
+def to_angle(vector):
+    x = vector[0]
+    y = vector[1]
+    mag = np.sqrt(x**2 + y**2)
+    angle = (np.pi/2.) - np.arctan2(x/mag, y/mag)
+    return mag, angle
 
-app.layout = html.Div(children=[
-    html.H1(children='Hello Dash'),
+def get_vectorfield_data(pso):
+    xs, ys, angles, mags, ids = [], [], [], [], []
+    for particle in range(pso.swarmsize):
+        xs.append(pso.x_hist[0][particle,0])
+        ys.append(pso.x_hist[0][particle,1])
+        mag, angle = to_angle(pso.v_hist[0][particle])
+        mags.append(mag)
+        angles.append(angle)
+        ids.append(particle)
+    return xs, ys, angles, mags, ids
 
-    html.Div(children='''
-        Dash: A web application framework for Python.
-    '''),
 
-    dcc.Graph(
-        id='example-graph',
-        figure=fig
+
+# Running the server
+if __name__ == "__main__":
+    pso = pso.PSO()
+    pso.pso()
+
+    vect_data = get_vectorfield_data(pso)
+    vectorfield = hv.VectorField(vect_data, vdims=['Angle', 'Magnitude', 'Index'])
+
+    # [x, y, id] for all particles
+    particles = [np.array([vect_data[0], vect_data[1], vect_data[4]]) for i in range(pso.swarmsize)]
+    points = hv.Points(particles, vdims=['Index'])
+    layout = vectorfield * points
+    layout.opts(
+        opts.VectorField(color='Index', cmap='tab20c', magnitude=dim('Magnitude').norm() * 10, pivot='tail'),
+        opts.Points(color='Index', cmap='tab20c', size=5)
     )
-])
-
-if __name__ == '__main__':
-    app.run_server(debug=True)
+    pn.Column(layout.opts(width=500, height=500))

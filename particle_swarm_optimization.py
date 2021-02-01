@@ -10,368 +10,451 @@ import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import axes3d
 
 
+class PSO():
 
-args = []
-kwargs = {}
+    args = []
+    kwargs = {}
 
-particle_output = False
+    particle_output = False
+
+    swarmsize = None
+    iterations = None
+    rand_init = None
+    omega = None
+    c1 = None
+    c2 = None
+    T1 = None
+    T2 = None
+    CONVERGENCE = None
+    DEBUG = None
+    PROCESSES = None
+
+    function = None
+
+    x_hist = None
+    v_hist = None
+    avg_cost_function = None
+    min_cost_function = None
+
+    lower_bounds = None
+    upper_bounds = None
+
+    scale_factor = None
+
+    def __init__(self, mode='regular', swarmsize = 100, iterations = 100, rand_init = False, omega = 0.5, c1 = 0.5, c2 = 0.5, T1 = 1e-10, T2 = 1e-10, CONVERGENCE = False, DEBUG = False, PROCESSES = 1, function = 0):
+        if mode != 'regular':
+            self.swarmsize = swarmsize
+            self.iterations = iterations
+            self.rand_init = rand_init
+            self.omega = omega
+            self.c1 = c1
+            self.c2 = c2
+            self.T1 = T1
+            self.T2 = T2
+            self.CONVERGENCE = CONVERGENCE
+            self.DEBUG = DEBUG
+            self.PROCESSES = PROCESSES
+
+            self.function = function
+        else:
+
+            config = configparser.ConfigParser()
+            config.read('config.ini')
+            pso = config['pso']
+
+            self.swarmsize = pso.getint("swarm_size")
+            self.iterations = pso.getint("maximum_iterations")
+            self.rand_init = pso.getboolean("random_initialization")
+            self.omega = pso.getfloat("velocity_scaling_factor")
+            self.c1 = pso.getfloat("particle_position_weight")
+            self.c2 = pso.getfloat("swarm_position_weight")
+            self.T1 = pso.getfloat("step_convergence_threshold")
+            self.T2 = pso.getfloat("value_convergence_threshold")
+            self.CONVERGENCE = pso.getboolean("converge_early")
+            self.DEBUG = pso.getboolean("DEBUG")
+            self.PROCESSES = pso.getint("PROCESSES")
+
+            self.function = config['functions'].getint("function_selection")
+
+        self.x_hist = np.zeros((self.iterations,self.swarmsize,2))
+        self.v_hist = np.zeros((self.iterations,self.swarmsize,2))
+        self.avg_cost_function = np.zeros((self.iterations))
+        self.min_cost_function = np.zeros((self.iterations))
+
+        self.lower_bounds = [0, 0]
+        self.upper_bounds = [10,10]
+
+        if self.function == 0:
+            self.lower_bounds = [0, 0]
+            self.upper_bounds = [10, 10]
+        elif self.function == 1:
+            self.lower_bounds = [-4.5, -4.5]
+            self.upper_bounds = [4.5, 4.5]
+        elif self.function == 2:
+            self.lower_bounds = [-2*math.pi, -2*math.pi]
+            self.upper_bounds = [2*math.pi, 2*math.pi]
+        elif self.function == 3:
+            self.lower_bounds = [-5.2, -5.2]
+            self.upper_bounds = [5.2, 5.2]
+
+        self.scale_factor = np.abs((np.max(self.upper_bounds)-np.min(self.lower_bounds)))*2
 
 
-config = configparser.ConfigParser()
-config.read('config.ini')
-pso = config['pso']
+    def _obj_wrapper(self, func, args, kwargs, x):
+        return func(x,*args,**kwargs)
 
-swarmsize = pso.getint("swarm_size")
-iterations = pso.getint("maximum_iterations")
-dimensions = pso.getint("dimensions")
-rand_init = pso.getboolean("random_initialization")
-omega = pso.getfloat("velocity_scaling_factor")
-c1 = pso.getfloat("particle_position_weight")
-c2 = pso.getfloat("swarm_position_weight")
-T1 = pso.getfloat("step_convergence_threshold")
-T2 = pso.getfloat("value_convergence_threshold")
-CONVERGENCE = pso.getboolean("converge_early")
-DEBUG = pso.getboolean("DEBUG")
-PROCESSES = pso.getint("PROCESSES")
+    def error(self, x):
+        x1 = x[0]
+        x2 = x[1]
+        if self.function == 0:
+            return -(np.sqrt(np.abs(x1))*np.sin(x1)*np.sqrt(np.abs(x2))*np.sin(x2))
+        elif self.function == 1:
+            return (1.5 - x1 + x1*x2)**2 + (2.25 - x1 + x1*x2**2)**2 + (2.625 - x1 + x1*x2**3)**2
+        elif self.function == 2:
+            return np.sin(x1)*np.exp((1-np.cos(x2))**2) + np.cos(x2)*np.exp((1-np.sin(x1))**2)
+        elif self.function == 3:
+            return -(1+np.cos(12*np.sqrt(x1**2+x2**2)))/(0.5*(x1**2+x2**2)+2)
+        else:
+            return - (np.sqrt(x1)*np.sin(x1)*np.sqrt(x2)*np.sin(x2))
 
-function = config['functions'].getint("function_selection")
+    def function_of(self, x,y):
+        return self.error([x,y])
 
-x_hist = np.zeros((iterations,swarmsize,dimensions))
-v_hist = np.zeros((iterations,swarmsize,dimensions))
-avg_cost_function = np.zeros((iterations))
-min_cost_function = np.zeros((iterations))
+    def error_plot(self, values):
+        z = np.zeros(values.shape[0])
+        for i in range(values.shape[0]):
+            val = values[i]
+            z[i] = self.error(val)
 
-lower_bounds = [0, 0]
-upper_bounds = [10,10]
+        return z
 
-if function == 0:
-    lower_bounds = [0, 0]
-    upper_bounds = [10, 10]
-elif function == 1:
-    lower_bounds = [-4.5, -4.5]
-    upper_bounds = [4.5, 4.5]
-elif function == 2:
-    lower_bounds = [-2*math.pi, -2*math.pi]
-    upper_bounds = [2*math.pi, 2*math.pi]
-elif function == 3:
-    lower_bounds = [-5.2, -5.2]
-    upper_bounds = [5.2, 5.2]
+    def plot_figure(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        x = np.arange(np.min(self.lower_bounds), np.max(self.upper_bounds), 0.05)
+        y = np.arange(np.min(self.lower_bounds), np.max(self.upper_bounds), 0.05)
+        X, Y = np.meshgrid(x,y)
+        zs = np.array(self.function_of(np.ravel(X),np.ravel(Y)))
+        Z = zs.reshape(X.shape)
 
+        ax.plot_surface(X,Y,Z, cmap='viridis', edgecolor='none')
+        plt.title("3D Plot of Objective Function")
+        plt.show()
 
-def _obj_wrapper(func, args, kwargs, x):
-    return func(x,*args,**kwargs)
+    def plot_contour(self):
+        fig, ax = plt.subplots()
 
-def error(x):
-    x1 = x[0]
-    x2 = x[1]
-    if function == 0:
-        return - (np.sqrt(x1)*np.sin(x1)*np.sqrt(x2)*np.sin(x2))
-    elif function == 1:
-        return (1.5 - x1 + x1*x2)**2 + (2.25 - x1 + x1*x2**2)**2 + (2.625 - x1 + x1*x2**3)**2
-    elif function == 2:
-        return np.sin(x1)*np.exp((1-np.cos(x2))**2) + np.cos(x2)*np.exp((1-np.sin(x1))**2)
-    elif function == 3:
-        return -(1+np.cos(12*np.sqrt(x1**2+x2**2)))/(0.5*(x1**2+x2**2)+2)
-    else:
-        return - (np.sqrt(x1)*np.sin(x1)*np.sqrt(x2)*np.sin(x2))
+        if np.max(self.upper_bounds) > 0 and np.min(self.lower_bounds) < 0:
+            x = np.arange(np.min(self.lower_bounds)*2, np.max(self.upper_bounds)*2, 0.05)
+            y = np.arange(np.min(self.lower_bounds)*2, np.max(self.upper_bounds)*2, 0.05)
+        elif np.min(self.lower_bounds) < 0 and np.max(self.upper_bounds) < 0:
+            x = np.arange(np.min(self.lower_bounds), 0-np.max(self.upper_bounds), 0.05)
+            y = np.arange(np.min(self.lower_bounds), 0-np.max(self.upper_bounds), 0.05)
+        elif np.min(self.lower_bounds) > 0 and np.max(self.upper_bounds) > 0:
+            x = np.arange(abs(np.min(self.lower_bounds))+np.min(self.lower_bounds), 2*np.max(self.upper_bounds), 0.05)
+            y = np.arange(abs(np.min(self.lower_bounds))+np.min(self.lower_bounds), 2*np.max(self.upper_bounds), 0.05)
+        else:
+            x = np.arange(2*np.min(self.lower_bounds), abs(np.max(self.upper_bounds))+np.max(self.upper_bounds), 0.05)
+            y = np.arange(2*np.min(self.lower_bounds), abs(np.max(self.upper_bounds))+np.max(self.upper_bounds), 0.05)
 
-def function_of(x,y):
-    return error([x,y])
+        X, Y = np.meshgrid(x,y)
+        zs = np.array(self.function_of(np.ravel(X),np.ravel(Y)))
+        Z = zs.reshape(X.shape)
 
-def error_plot(values):
-    z = np.zeros(values.shape[0])
-    for i in range(values.shape[0]):
-        val = values[i]
-        z[i] = error(val)
+        CS = ax.contour(X,Y,Z, cmap='viridis', edgecolor='none')
+        ax.clabel(CS, inline=1, fontsize=10)
+        plt.title("2D Contour Plot of Objective Function")
+        plt.show()
 
-    return z
+    def pso(self):
+        #global mp_pool
+        #global swarmsize
+        #global x_hist,v_hist,min_cost_function,avg_cost_function
+        lb = np.array(self.lower_bounds.copy())
+        ub = np.array(self.upper_bounds.copy())
+        assert np.all(ub>lb), 'All upper bound values must be greater than the corresponding lower bound values'
 
-def plot_figure():
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    x = np.arange(np.min(lower_bounds), np.max(upper_bounds), 0.05)
-    y = np.arange(np.min(lower_bounds), np.max(upper_bounds), 0.05)
-    X, Y = np.meshgrid(x,y)
-    zs = np.array(function_of(np.ravel(X),np.ravel(Y)))
-    Z = zs.reshape(X.shape)
+        upperV = np.abs(ub-lb)
+        lowerV = -upperV
 
-    ax.plot_surface(X,Y,Z, cmap='viridis', edgecolor='none')
-    plt.title("3D Plot of Objective Function")
-    plt.show()
+        #plot_figure()
+        #plot_contour()
 
-def plot_contour():
-    fig, ax = plt.subplots()
+        objective = partial(self._obj_wrapper, self.error, self.args, self.kwargs)
 
-    if np.max(upper_bounds) > 0 and np.min(lower_bounds) < 0:
-        x = np.arange(np.min(lower_bounds)*2, np.max(upper_bounds)*2, 0.05)
-        y = np.arange(np.min(lower_bounds)*2, np.max(upper_bounds)*2, 0.05)
-    elif np.min(lower_bounds) < 0 and np.max(upper_bounds) < 0:
-        x = np.arange(np.min(lower_bounds), 0-np.max(upper_bounds), 0.05)
-        y = np.arange(np.min(lower_bounds), 0-np.max(upper_bounds), 0.05)
-    elif np.min(lower_bounds) > 0 and np.max(upper_bounds) > 0:
-        x = np.arange(abs(np.min(lower_bounds))+np.min(lower_bounds), 2*np.max(upper_bounds), 0.05)
-        y = np.arange(abs(np.min(lower_bounds))+np.min(lower_bounds), 2*np.max(upper_bounds), 0.05)
-    else:
-        x = np.arange(2*np.min(lower_bounds), abs(np.max(upper_bounds))+np.max(upper_bounds), 0.05)
-        y = np.arange(2*np.min(lower_bounds), abs(np.max(upper_bounds))+np.max(upper_bounds), 0.05)
+        if self.PROCESSES > 1:
+            import multiprocessing
+            mp_pool = multiprocessing.Pool(self.PROCESSES)
 
-    X, Y = np.meshgrid(x,y)
-    zs = np.array(function_of(np.ravel(X),np.ravel(Y)))
-    Z = zs.reshape(X.shape)
+        #initialize a few arrays
+        S = self.swarmsize
+        x = np.random.rand(S,2)
+        v = np.zeros_like(x)
+        p = np.zeros_like(x)
+        fx = np.zeros(S)
+        fp = np.ones(S)*np.inf
+        g = []
+        fg = np.inf
 
-    CS = ax.contour(X,Y,Z, cmap='viridis', edgecolor='none')
-    ax.clabel(CS, inline=1, fontsize=10)
-    plt.title("2D Contour Plot of Objective Function")
-    plt.show()
+        # initialize particles
+        x = lb + x*(ub-lb)
 
-def pso():
-    global mp_pool
-    global swarmsize
-    global x_hist,v_hist,min_cost_function,avg_cost_function
-    assert dimensions > 1, 'Must provide at least 2 dimensions'
-    assert dimensions == 2, 'Currently only supports 2 dimensions max'
-    lb = np.array(lower_bounds[:dimensions])
-    ub = np.array(upper_bounds[:dimensions])
-    assert np.all(ub>lb), 'All upper bound values must be greater than the corresponding lower bound values'
-
-    upperV = np.abs(ub-lb)
-    lowerV = -upperV
-
-    #plot_figure()
-    #plot_contour()
-
-    objective = partial(_obj_wrapper, error, args, kwargs)
-
-    if PROCESSES > 1:
-        import multiprocessing
-        mp_pool = multiprocessing.Pool(PROCESSES)
-
-    #initialize a few arrays
-    S = swarmsize
-    D = dimensions
-    x = np.random.rand(S,D)
-    v = np.zeros_like(x)
-    p = np.zeros_like(x)
-    fx = np.zeros(S)
-    fp = np.ones(S)*np.inf
-    g = []
-    fg = np.inf
-
-    # initialize particles
-    x = lb + x*(ub-lb)
-
-    #calculate objectives for each particles
-    if PROCESSES>1:
-        fx = np.array(mp_pool.map(objective,x))
-    else:
-        for i in range(S):
-            fx[i] = objective(x[i,:])
-
-    i_update = fx<fp
-    p[i_update,:] = x[i_update,:].copy()
-    fp[i_update] = fx[i_update]
-
-    i_min = np.argmin(fp)
-    if fp[i_min]<fg:
-        fg = fp[i_min]
-        g = p[i_min,:].copy()
-    else:
-        g = x[0,:].copy()
-
-    v=lowerV + np.random.rand(S,D)*(upperV-lowerV)
-
-    it = 1
-    while it <= iterations:
-        x_hist[it-1] = np.array(x)
-        v_hist[it-1] = np.array(v)
-        rp = np.random.uniform(size=(S,D))
-        rg = np.random.uniform(size=(S,D))
-
-        v = omega*v + c1*rp*(p-x) + c2*rg*(g-x)
-
-        x = x + v
-
-        lower_mask = x<lb
-        upper_mask = x>ub
-
-        x = x*(~np.logical_or(lower_mask, upper_mask)) + lb*lower_mask + ub*upper_mask
-
-        if PROCESSES>1:
-            fx = np.array(mp_pool.map(objective,x))
+        #calculate objectives for each particles
+        if self.PROCESSES>1:
+            fx = np.array(self.mp_pool.map(objective,x))
         else:
             for i in range(S):
                 fx[i] = objective(x[i,:])
-
 
         i_update = fx<fp
         p[i_update,:] = x[i_update,:].copy()
         fp[i_update] = fx[i_update]
 
         i_min = np.argmin(fp)
-        min_cost_function[it-1]=fp[i_min]
-        avg_cost_function[it-1]=np.average(fp)
-        if fp[i_min] < fg:
-            if DEBUG:
-                print('New best for swarm at iteration {:}: {:} {:}' \
-                      .format(it, p[i_min, :], fp[i_min]))
+        if fp[i_min]<fg:
+            fg = fp[i_min]
+            g = p[i_min,:].copy()
+        else:
+            g = x[0,:].copy()
 
-            p_min = p[i_min, :].copy()
-            stepsize = np.sqrt(np.sum((g - p_min) ** 2))
+        v=lowerV + np.random.rand(S,2)*(upperV-lowerV)
 
-            if CONVERGENCE and np.abs(fg - fp[i_min]) <= T2:
-                print('Stopping search: Swarm best objective change less than {:}' \
-                      .format(T2))
-                x_hist=x_hist[:it]
-                v_hist=v_hist[:it]
-                min_cost_function=min_cost_function[:it]
-                avg_cost_function=avg_cost_function[:it]
-                if particle_output:
-                    return p_min, fp[i_min], p, fp
-                else:
-                    return p_min, fp[i_min]
-            elif CONVERGENCE and stepsize <= T1:
-                print('Stopping search: Swarm best position change less than {:}' \
-                      .format(T1))
-                x_hist=x_hist[:it]
-                v_hist=v_hist[:it]
-                min_cost_function=min_cost_function[:it]
-                avg_cost_function=avg_cost_function[:it]
-                if particle_output:
-                    return p_min, fp[i_min], p, fp
-                else:
-                    return p_min, fp[i_min]
+        it = 1
+        while it <= self.iterations:
+            self.x_hist[it-1] = np.array(x)
+            self.v_hist[it-1] = np.array(v)
+            rp = np.random.uniform(size=(S,2))
+            rg = np.random.uniform(size=(S,2))
+
+            v = self.omega*v + self.c1*rp*(p-x) + self.c2*rg*(g-x)
+
+            x = x + v
+
+            lower_mask = x<lb
+            upper_mask = x>ub
+
+            x = x*(~np.logical_or(lower_mask, upper_mask)) + lb*lower_mask + ub*upper_mask
+
+            if self.PROCESSES>1:
+                fx = np.array(mp_pool.map(objective,x))
             else:
-                g = p_min.copy()
-                fg = fp[i_min]
+                for i in range(S):
+                    fx[i] = objective(x[i,:])
 
-        if DEBUG:
-            print('Best after iteration {:}: {:} {:}'.format(it, g, fg))
-        it += 1
 
-    print('Stopping search: maximum iterations reached --> {:}'.format(iterations))
+            i_update = fx<fp
+            p[i_update,:] = x[i_update,:].copy()
+            fp[i_update] = fx[i_update]
 
-    if particle_output:
-        return g, fg, p, fp
-    else:
-        return g, fg
+            i_min = np.argmin(fp)
+            self.min_cost_function[it-1]=fp[i_min]
+            self.avg_cost_function[it-1]=np.average(fp)
+            if fp[i_min] < fg:
+                if self.DEBUG:
+                    print('New best for swarm at iteration {:}: {:} {:}' \
+                          .format(it, p[i_min, :], fp[i_min]))
 
-def animate2D(data_used, label):
-    global ax1, data, line, stop, ani
-    data = data_used.copy()
-    stop = np.size(data)
-    indices = np.linspace(0,stop,stop-1)
-    fig = plt.figure()
-    ax1 = plt.axes(xlim=[0, stop],ylim=[np.min(data), np.max(data)])
-    plt.xlabel('Iterations')
-    plt.ylabel('Cost')
-    plt.title(label + ' Cost Function')
-    line, = ax1.plot([],[],lw=3)
-    ani = animation.FuncAnimation(fig, animate, np.arange(0,stop), fargs=[indices, data, line], interval=20, blit=True)
-    plt.show()
+                p_min = p[i_min, :].copy()
+                stepsize = np.sqrt(np.sum((g - p_min) ** 2))
 
-def animate(i, x, y, line):
-    if(i >= stop-1):
-        ani.event_source.stop()
-    line.set_data(x[:i],y[:i])
-    line.axes.axis([0, np.size(data),np.min(data), np.max(data)])
-    return line,
+                if self.CONVERGENCE and np.abs(fg - fp[i_min]) <= self.T2:
+                    print('Stopping search: Swarm best objective change less than {:}' \
+                          .format(self.T2))
+                    x_hist=self.x_hist[:it]
+                    v_hist=self.v_hist[:it]
+                    min_cost_function=self.min_cost_function[:it]
+                    avg_cost_function=self.avg_cost_function[:it]
+                    if self.particle_output:
+                        return p_min, fp[i_min], p, fp
+                    else:
+                        return p_min, fp[i_min]
+                elif self.CONVERGENCE and stepsize <= self.T1:
+                    print('Stopping search: Swarm best position change less than {:}' \
+                          .format(self.T1))
+                    x_hist=self.x_hist[:it]
+                    v_hist=self.v_hist[:it]
+                    min_cost_function=self.min_cost_function[:it]
+                    avg_cost_function=self.avg_cost_function[:it]
+                    if self.particle_output:
+                        return p_min, fp[i_min], p, fp
+                    else:
+                        return p_min, fp[i_min]
+                else:
+                    g = p_min.copy()
+                    fg = fp[i_min]
 
-scale_factor = np.abs((np.max(upper_bounds)-np.min(lower_bounds)))
+            if self.DEBUG:
+                print('Best after iteration {:}: {:} {:}'.format(it, g, fg))
+            it += 1
 
-def animate_contour(positions, velocities):
-    global ax2, xs, vs, stop, ani, fig, contour_vectors
-    xs = positions.copy()
-    vs = velocities.copy()
+        print('Stopping search: maximum iterations reached --> {:}'.format(self.iterations))
 
-    fig = plt.figure()
-    stop = xs.shape[0]
-    ax2 = plt.axes(xlim=[np.min(lower_bounds), np.max(upper_bounds)],ylim=[np.min(lower_bounds), np.max(upper_bounds)])
+        if self.particle_output:
+            return g, fg, p, fp
+        else:
+            return g, fg
 
-    if np.max(upper_bounds) > 0 and np.min(lower_bounds) < 0:
-        x = np.arange(np.min(lower_bounds)*2, np.max(upper_bounds)*2, 0.05)
-        y = np.arange(np.min(lower_bounds)*2, np.max(upper_bounds)*2, 0.05)
-    elif np.min(lower_bounds) < 0 and np.max(upper_bounds) < 0:
-        x = np.arange(np.min(lower_bounds), 0-np.max(upper_bounds), 0.05)
-        y = np.arange(np.min(lower_bounds), 0-np.max(upper_bounds), 0.05)
-    elif np.min(lower_bounds) > 0 and np.max(upper_bounds) > 0:
-        x = np.arange(abs(np.min(lower_bounds))+np.min(lower_bounds), 2*np.max(upper_bounds), 0.05)
-        y = np.arange(abs(np.min(lower_bounds))+np.min(lower_bounds), 2*np.max(upper_bounds), 0.05)
-    else:
-        x = np.arange(2*np.min(lower_bounds), abs(np.max(upper_bounds))+np.max(upper_bounds), 0.05)
-        y = np.arange(2*np.min(lower_bounds), abs(np.max(upper_bounds))+np.max(upper_bounds), 0.05)
+    def animate2D(self, data_used, label):
+        #global ax1, data, line, stop, ani
+        self.data = data_used.copy()
+        self.stop = np.size(self.data)
+        indices = np.linspace(0,self.stop,self.stop-1)
+        fig = plt.figure()
+        ax1 = plt.axes(xlim=[0, self.stop],ylim=[np.min(self.data), np.max(self.data)])
+        plt.xlabel('Iterations')
+        plt.ylabel('Cost')
+        plt.title(label + ' Cost Function')
+        self.line, = ax1.plot([],[],lw=3)
+        self.ani = animation.FuncAnimation(fig, self.animate, np.arange(0,self.stop), fargs=[indices, self.data, self.line], interval=20, blit=True)
+        plt.show()
 
-    X, Y = np.meshgrid(x,y)
-    zs = np.array(function_of(np.ravel(X),np.ravel(Y)))
-    Z = zs.reshape(X.shape)
+    def animate(self, i, x, y, line):
+        if(i >= self.stop-1):
+            self.ani.event_source.stop()
+        line.set_data(x[:i],y[:i])
+        line.axes.axis([0, np.size(self.data),np.min(self.data), np.max(self.data)])
+        return line,
 
-    CS = ax2.contour(X,Y,Z, cmap='viridis')
-    plt.title("2D Contour Plot of Objective Function")
+    def rand_cmap(self, nlabels):
+        from matplotlib.colors import LinearSegmentedColormap
+        import colorsys
+        import numpy as np
 
-    Xs = xs[0]
-    x_Xs = Xs[:,0]
-    y_Xs = Xs[:,1]
-    Vs = vs[0]
-    x_Vs = Vs[:,0]
-    y_Vs = Vs[:,1]
-    scatters = ax2.scatter(x_Xs,y_Xs,c="black", marker="o")
-    contour_vectors = ax2.quiver(x_Xs,y_Xs,x_Vs,y_Vs, scale=50)
-    ani = animation.FuncAnimation(fig, animate2, np.arange(0,stop-2), fargs=[scatters], interval=50, blit=False, repeat=True)
-    plt.show()
+        # Generate color map for bright colors, based on hsv
+        randHSVcolors = [(np.random.uniform(low=0.0, high=1),
+                              np.random.uniform(low=0.2, high=1),
+                              np.random.uniform(low=0.9, high=1)) for i in range(nlabels)]
 
-def animate2(i, scatters):
-    global contour_vectors
-    plot_data = xs[i]
-    v_plot_data = vs[i]
+        # Convert HSV list to RGB
+        randRGBcolors = []
+        for HSVcolor in randHSVcolors:
+            randRGBcolors.append(colorsys.hsv_to_rgb(HSVcolor[0], HSVcolor[1], HSVcolor[2]))
 
-    contour_vectors.remove()
-    scatters.set_offsets(plot_data)
-    contour_vectors = ax2.quiver(plot_data[:,0],plot_data[:,1],v_plot_data[:,0],v_plot_data[:,1],scale=50)
-    return (scatters, contour_vectors),
+        random_colormap = LinearSegmentedColormap.from_list('new_map', randRGBcolors, N=nlabels)
 
-def animate3D(positions, velocities):
-    global ax3, xs, vs, stop, ani3, fig3, vectors, scale_factor
-    xs = positions.copy()
-    vs = velocities.copy()
+        return random_colormap
 
-    fig3 = plt.figure()
-    ax3 = axes3d.Axes3D(fig3)
-    x = np.arange(np.min(lower_bounds), np.max(upper_bounds), 0.05)
-    y = np.arange(np.min(lower_bounds), np.max(upper_bounds), 0.05)
-    X, Y = np.meshgrid(x,y)
-    zs = np.array(function_of(np.ravel(X),np.ravel(Y)))
-    Z = zs.reshape(X.shape)
+    def animate_contour(self, positions, velocities):
+        #global ax2, xs, vs, stop, ani, fig, contour_vectors
+        self.xs = positions.copy()
+        self.vs = velocities.copy()
 
-    ax3.plot_surface(X,Y,Z, cmap='viridis', edgecolor='none', alpha=0.2)
-    plt.title("3D Plot of Objective Function")
+        fig = plt.figure()
+        self.stop = self.xs.shape[0]
+        self.ax2 = plt.axes(xlim=[np.min(self.lower_bounds), np.max(self.upper_bounds)],ylim=[np.min(self.lower_bounds), np.max(self.upper_bounds)])
 
-    stop = xs.shape[0]
-    scale_factor /= stop
-    Xs = xs[0]
-    x_Xs = Xs[:,0]
-    y_Xs = Xs[:,1]
-    z_Xs = error_plot(Xs[:,:])
-    Vs = vs[0]
-    x_Vs = Vs[:,0]*scale_factor
-    y_Vs = Vs[:,1]*scale_factor
-    z_Vs = error_plot(Vs[:,:])*scale_factor
-    scatters = ax3.scatter(x_Xs,y_Xs,z_Xs,c="black", marker="o")
-    vectors = ax3.quiver(x_Xs,y_Xs,z_Xs,x_Vs,y_Vs,z_Vs)
-    ani3 = animation.FuncAnimation(fig3, animate3, np.arange(0,stop-2), fargs=[scatters], interval=20, blit=False, repeat=True)
-    plt.show()
+        if np.max(self.upper_bounds) > 0 and np.min(self.lower_bounds) < 0:
+            x = np.arange(np.min(self.lower_bounds)*2, np.max(self.upper_bounds)*2, 0.05)
+            y = np.arange(np.min(self.lower_bounds)*2, np.max(self.upper_bounds)*2, 0.05)
+        elif np.min(self.lower_bounds) < 0 and np.max(self.upper_bounds) < 0:
+            x = np.arange(np.min(self.lower_bounds), 0-np.max(self.upper_bounds), 0.05)
+            y = np.arange(np.min(self.lower_bounds), 0-np.max(self.upper_bounds), 0.05)
+        elif np.min(self.lower_bounds) > 0 and np.max(self.upper_bounds) > 0:
+            x = np.arange(abs(np.min(self.lower_bounds))+np.min(self.lower_bounds), 2*np.max(self.upper_bounds), 0.05)
+            y = np.arange(abs(np.min(self.lower_bounds))+np.min(self.lower_bounds), 2*np.max(self.upper_bounds), 0.05)
+        else:
+            x = np.arange(2*np.min(self.lower_bounds), abs(np.max(self.upper_bounds))+np.max(self.upper_bounds), 0.05)
+            y = np.arange(2*np.min(self.lower_bounds), abs(np.max(self.upper_bounds))+np.max(self.upper_bounds), 0.05)
 
-def animate3(i, scatters):
-    global vectors, scale_factor
-    plot_data = xs[i]
-    v_plot_data = vs[i]
+        X, Y = np.meshgrid(x,y)
+        zs = np.array(self.function_of(np.ravel(X),np.ravel(Y)))
+        Z = zs.reshape(X.shape)
 
-    vectors.remove()
-    scatters._offsets3d = (plot_data[:,0],plot_data[:,1],error_plot(plot_data[:]))
-    vectors = ax3.quiver(plot_data[:,0],plot_data[:,1],error_plot(plot_data[:]),v_plot_data[:,0]*scale_factor,v_plot_data[:,1]*scale_factor,error_plot(plot_data[:])*scale_factor)
-    return (scatters, vectors),
+        self.CS = self.ax2.contour(X,Y,Z, cmap='viridis')
+        plt.title("2D Contour Plot of Objective Function")
+
+        Xs = self.xs[0]
+        x_Xs = Xs[:,0]
+        y_Xs = Xs[:,1]
+        Vs = self.vs[0]
+        x_Vs = Vs[:,0]
+        y_Vs = Vs[:,1]
+
+
+        cmap = self.rand_cmap(self.swarmsize)
+        scatters = self.ax2.scatter(x_Xs,y_Xs,c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",vmin = 0, vmax = self.swarmsize)
+        self.contour_vectors = self.ax2.quiver(x_Xs,y_Xs,x_Vs,y_Vs, scale=50)
+        lines = []
+        for i in range(self.swarmsize):
+            line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.2)
+            lines.append(line)
+        self.ani2 = animation.FuncAnimation(fig, self.animate2, np.arange(0,self.stop-2), fargs=[scatters, lines], interval=50, blit=False, repeat=True)
+        plt.show()
+
+    def animate2(self, i, scatters, lines):
+        #global contour_vectors
+        plot_data = self.xs[i]
+        v_plot_data = self.vs[i]
+
+        self.contour_vectors.remove()
+        scatters.set_offsets(plot_data)
+        if i > 1:
+            for lnum,line in enumerate(lines):
+                data = self.xs[:i,lnum,:]
+                line[0].set_data(data[:,0],data[:,1])
+        self.contour_vectors = self.ax2.quiver(plot_data[:,0],plot_data[:,1],v_plot_data[:,0],v_plot_data[:,1],scale=50)
+        return (scatters, self.contour_vectors),
+
+    def animate3D(self, positions, velocities):
+        #global ax3, xs, vs, stop, ani3, fig3, vectors, scale_factor
+        self.xs = positions.copy()
+        self.vs = velocities.copy()
+
+        fig3 = plt.figure()
+        self.ax3 = axes3d.Axes3D(fig3)
+        x = np.arange(np.min(self.lower_bounds), np.max(self.upper_bounds), 0.05)
+        y = np.arange(np.min(self.lower_bounds), np.max(self.upper_bounds), 0.05)
+        X, Y = np.meshgrid(x,y)
+        zs = np.array(self.function_of(np.ravel(X),np.ravel(Y)))
+        Z = zs.reshape(X.shape)
+
+        self.ax3.plot_surface(X,Y,Z, cmap='gray', edgecolor='none', alpha=0.2)
+        plt.title("3D Plot of Objective Function")
+
+        self.stop = self.xs.shape[0]
+        self.scale_factor /= self.stop
+        Xs = self.xs[0]
+        x_Xs = Xs[:,0]
+        y_Xs = Xs[:,1]
+        z_Xs = self.error_plot(Xs[:,:])
+        Vs = self.vs[0]
+        x_Vs = Vs[:,0]*self.scale_factor
+        y_Vs = Vs[:,1]*self.scale_factor
+        z_Vs = self.error_plot(Vs[:,:])*self.scale_factor
+
+        cmap = self.rand_cmap(self.swarmsize)
+        scatters = self.ax3.scatter(x_Xs,y_Xs,z_Xs,c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",vmin = 0, vmax = self.swarmsize)
+        self.vectors = self.ax3.quiver(x_Xs,y_Xs,z_Xs,x_Vs,y_Vs,z_Vs)
+        lines = []
+        for i in range(self.swarmsize):
+            line = self.ax3.plot(self.xs[0, i, 0], self.xs[0, i, 1], z_Xs[i], c=cmap(i), alpha=0.5)
+            lines.append(line)
+
+        self.ani3 = animation.FuncAnimation(fig3, self.animate3, frames=500, fargs=[scatters, lines], interval=100, blit=False, repeat=True)
+        plt.show()
+
+    def animate3(self, i, scatters,lines):
+        #global vectors, scale_factor
+        if i < self.iterations:
+            plot_data = self.xs[i]
+            v_plot_data = self.vs[i]
+            z_Xs = self.error_plot(plot_data[:])
+
+            self.vectors.remove()
+            if i > 1:
+                for lnum,line in enumerate(lines):
+                    data = self.xs[:i,lnum,:]
+                    function_data = self.error_plot(data)
+                    line[0].set_data(data[:,0],data[:,1])
+                    line[0].set_3d_properties(function_data)
+            scatters._offsets3d = (plot_data[:,0],plot_data[:,1],z_Xs)
+            self.vectors = self.ax3.quiver(plot_data[:,0],plot_data[:,1],z_Xs,v_plot_data[:,0]*self.scale_factor,v_plot_data[:,1]*self.scale_factor,z_Xs*self.scale_factor)
+        return (scatters, self.vectors),
 
 
 if __name__ == '__main__':
-    pso()
+    pso = PSO()
+    pso.pso()
     #print(x_hist)
     #print(v_hist)
     #plt.plot(min_cost_function)
@@ -386,7 +469,7 @@ if __name__ == '__main__':
     #plt.show()
 
 
-    animate2D(min_cost_function, "Min")
-    animate2D(avg_cost_function, "Average")
-    animate_contour(x_hist,v_hist)
-    animate3D(x_hist, v_hist)
+    pso.animate2D(pso.min_cost_function, "Min")
+    pso.animate2D(pso.avg_cost_function, "Average")
+    pso.animate_contour(pso.x_hist,pso.v_hist)
+    pso.animate3D(pso.x_hist, pso.v_hist)
