@@ -47,7 +47,7 @@ class PSO():
     v_hist = None
     avg_cost_function = None
     min_cost_function = None
-    scale_factor = None
+    #scale_factor = None
 
     def __init__(self, mode='config', swarmsize=100, iterations=100, rand_init=False, omega=0.5, c1=0.5, c2=0.5,
                  T1=1e-10, T2=1e-10, CONVERGENCE=False, PROCESSES=1, function=0):
@@ -117,7 +117,7 @@ class PSO():
             self.upper_bounds = [10, 10]
             self.goal = [1, 1]
 
-        self.scale_factor = np.abs((np.max(self.upper_bounds) - np.min(self.lower_bounds))) * 2
+        #self.scale_factor = np.abs((np.max(self.upper_bounds) - np.min(self.lower_bounds))) * 2
 
     # --- COST FUNCTION----------------------------------------------+
     def _obj_wrapper(self, func, args, kwargs, x):
@@ -244,10 +244,6 @@ class PSO():
                     self.v_hist = self.v_hist[:it]
                     self.min_cost_function = self.min_cost_function[:it]
                     self.avg_cost_function = self.avg_cost_function[:it]
-                    if self.particle_output:
-                        return p_min, fp[i_min], p, fp
-                    else:
-                        return p_min, fp[i_min]
                 elif self.CONVERGENCE and stepsize <= self.T1:
                     print('Stopping search: Swarm best position change less than {:}' \
                           .format(self.T1))
@@ -255,10 +251,6 @@ class PSO():
                     self.v_hist = self.v_hist[:it]
                     self.min_cost_function = self.min_cost_function[:it]
                     self.avg_cost_function = self.avg_cost_function[:it]
-                    if self.particle_output:
-                        return p_min, fp[i_min], p, fp
-                    else:
-                        return p_min, fp[i_min]
                 else:
                     g = p_min.copy()
                     fg = fp[i_min]
@@ -361,7 +353,7 @@ class PSO():
         for i in range(self.swarmsize):
             line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.3)
             lines.append(line)
-        self.ani2 = animation.FuncAnimation(fig, self.animate2, np.arange(0, self.stop - 2), fargs=[scatters, lines],
+        self.ani2 = animation.FuncAnimation(fig, self.animate2, frames=self.iterations, fargs=[scatters, lines],
                                             interval=50, blit=False, repeat=True)
         plt.show()
 
@@ -396,15 +388,15 @@ class PSO():
         plt.title("3D Plot of Objective Function")
 
         self.stop = self.xs.shape[0]
-        self.scale_factor /= self.stop
+        #self.scale_factor /= self.stop
         Xs = self.xs[0]
         x_Xs = Xs[:, 0]
         y_Xs = Xs[:, 1]
         z_Xs = self.error_plot(Xs[:, :])
         Vs = self.vs[0]
-        x_Vs = Vs[:, 0] * self.scale_factor
-        y_Vs = Vs[:, 1] * self.scale_factor
-        z_Vs = self.error_plot(Vs[:, :]) * self.scale_factor
+        x_Vs = Vs[:, 0]# * self.scale_factor
+        y_Vs = Vs[:, 1]# * self.scale_factor
+        z_Vs = self.error_plot(Vs[:, :])# * self.scale_factor
 
         if len(self.goal) == 2:
             goal_z = self.error_plot(np.array([self.goal]))
@@ -424,26 +416,25 @@ class PSO():
             line = self.ax3.plot(self.xs[0, i, 0], self.xs[0, i, 1], z_Xs[i], c=cmap(i), alpha=0.5)
             lines.append(line)
 
-        self.ani3 = animation.FuncAnimation(fig3, self.animate3, frames=500, fargs=[scatters, lines], interval=100,
+        self.ani3 = animation.FuncAnimation(fig3, self.animate3, frames=self.iterations, fargs=[scatters, lines], interval=100,
                                             blit=False, repeat=True)
         plt.show()
 
     def animate3(self, i, scatters, lines):
         # global vectors, scale_factor
-        if i < self.iterations:
-            plot_data = self.xs[i]
-            v_plot_data = self.vs[i]
-            z_Xs = self.error_plot(plot_data[:])
+        plot_data = self.xs[i]
+        v_plot_data = self.vs[i]
+        z_Xs = self.error_plot(plot_data[:])
 
-            #self.vectors.remove()
-            if i > 5:
-                for lnum, line in enumerate(lines):
-                    data = self.xs[i - 5:i, lnum, :]
-                    function_data = self.error_plot(data)
-                    line[0].set_data(data[:, 0], data[:, 1])
-                    line[0].set_3d_properties(function_data)
-            scatters._offsets3d = (plot_data[:, 0], plot_data[:, 1], z_Xs)
-            #self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,z_Xs * self.scale_factor)
+        #self.vectors.remove()
+        if i > 5:
+            for lnum, line in enumerate(lines):
+                data = self.xs[i - 5:i, lnum, :]
+                function_data = self.error_plot(data)
+                line[0].set_data(data[:, 0], data[:, 1])
+                line[0].set_3d_properties(function_data)
+        scatters._offsets3d = (plot_data[:, 0], plot_data[:, 1], z_Xs)
+        #self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,z_Xs * self.scale_factor)
         return scatters,
 
 
