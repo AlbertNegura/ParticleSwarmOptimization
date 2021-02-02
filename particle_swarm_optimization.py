@@ -159,11 +159,9 @@ class PSO():
 
         #initialize a few arrays
         x = np.random.rand(self.swarmsize,2)
-        v = np.zeros_like(x)
         p = np.zeros_like(x)
         fx = np.zeros(self.swarmsize)
         fp = np.ones(self.swarmsize)*np.inf
-        g = []
         fg = np.inf
 
         # initialize particles
