@@ -22,8 +22,6 @@ import configparser
 
 #--- PSO CLASS--------------------------------------------------+
 class PSO():
-    args = []
-    kwargs = {}
 
     #config-adjustable parameters
     swarmsize = None
@@ -36,6 +34,8 @@ class PSO():
     T2 = None
     CONVERGENCE = None
     PROCESSES = None
+    mp_pool = None
+
     #function selector (6 implemented functions)
     function = None
     lower_bounds = None
@@ -120,9 +120,6 @@ class PSO():
         #self.scale_factor = np.abs((np.max(self.upper_bounds) - np.min(self.lower_bounds))) * 2
 
     # --- COST FUNCTION----------------------------------------------+
-    def _obj_wrapper(self, func, args, kwargs, x):
-        return func(x, *args, **kwargs)
-
     def error(self, x):
         x1 = x[0]
         x2 = x[1]
@@ -140,6 +137,9 @@ class PSO():
             return (x2 - x1 ** 2) ** 2 + x1 ** 2
         else:
             return - (np.sqrt(x1) * np.sin(x1) * np.sqrt(x2) * np.sin(x2))
+
+    def wrapper(self, func, x):
+        return func(x)
 
     def function_of(self, x, y):
         return self.error([x, y])
@@ -167,20 +167,20 @@ class PSO():
         upperV = np.abs(ub - lb)
         lowerV = -upperV
 
-        objective = partial(self._obj_wrapper, self.error, self.args, self.kwargs)
+        objective = partial(self.wrapper, self.error)
 
         if self.PROCESSES > 1:
             import multiprocessing
             mp_pool = multiprocessing.Pool(self.PROCESSES)
 
         # initialize a few arrays
-        x = np.random.rand(self.swarmsize, 2)
-        p = np.zeros_like(x)
-        fx = np.zeros(self.swarmsize)
-        fp = np.ones(self.swarmsize) * np.inf
-        fg = np.inf
+        x = np.random.rand(self.swarmsize, 2) # particle position
+        p = np.zeros_like(x) # best known position per particle
+        fx = np.zeros(self.swarmsize) # objective function value per particle
+        fp = np.ones(self.swarmsize) * np.inf # best particle position objective function value
+        fg = np.inf # objective value of the best particle position
 
-        # initialize particles
+        # initialize particle positions randomly in the function bounds
         x = lb + x * (ub - lb)
 
         # calculate objectives for each particles
@@ -188,69 +188,79 @@ class PSO():
             fx = np.array(self.mp_pool.map(objective, x))
         else:
             for i in range(self.swarmsize):
-                fx[i] = objective(x[i, :])
+                fx[i] = objective(x[i, :]) #calculate objective function
 
-        i_update = fx < fp
+        i_update = fx < fp #selector to decide which particles to update
         p[i_update, :] = x[i_update, :].copy()
-        fp[i_update] = fx[i_update]
+        fp[i_update] = fx[i_update] #best particle position
 
+        # index of best particle
         i_min = np.argmin(fp)
-        if fp[i_min] < fg:
+        if fp[i_min] < fg: #if the best particle is in a better position than all other particles
             fg = fp[i_min]
-            g = p[i_min, :].copy()
+            g = p[i_min, :].copy() #best known swarm position
         else:
-            g = x[0, :].copy()
+            g = x[0, :].copy() #best known swarm position
 
+        # calculate initial velocity vector
         v = lowerV + np.random.rand(self.swarmsize, 2) * (upperV - lowerV)
 
+        #iterate over self.iterations
         it = 1
         while it <= self.iterations:
+            # add position/velocity of all particles to history array for plotting
             self.x_hist[it - 1] = np.array(x)
             self.v_hist[it - 1] = np.array(v)
+            # update velocity vector with slight randomization to approach minimum
             rp = np.random.uniform(size=(self.swarmsize, 2))
             rg = np.random.uniform(size=(self.swarmsize, 2))
-
             v = self.omega * v + self.c1 * rp * (p - x) + self.c2 * rg * (g - x)
-
+            # update position vector
             x = x + v
 
+            # prevent out of bounds
             lower_mask = x < lb
             upper_mask = x > ub
 
             x = x * (~np.logical_or(lower_mask, upper_mask)) + lb * lower_mask + ub * upper_mask
 
+            # update objective function
             if self.PROCESSES > 1:
-                fx = np.array(mp_pool.map(objective, x))
+                fx = np.array(self.mp_pool.map(objective, x))
             else:
                 for i in range(self.swarmsize):
                     fx[i] = objective(x[i, :])
 
+            # store best position
             i_update = fx < fp
             p[i_update, :] = x[i_update, :].copy()
             fp[i_update] = fx[i_update]
 
+            # compare swarm best position with global best position
             i_min = np.argmin(fp)
-            self.min_cost_function[it - 1] = fp[i_min]
-            self.avg_cost_function[it - 1] = np.average(fp)
+            self.min_cost_function[it - 1] = fp[i_min] # min cost function for plotting
+            self.avg_cost_function[it - 1] = np.average(fp) # average cost function for plotting
             if fp[i_min] < fg:
 
                 p_min = p[i_min, :].copy()
                 stepsize = np.sqrt(np.sum((g - p_min) ** 2))
 
+                # converge early
+                # if swarm objective change is too small
                 if self.CONVERGENCE and np.abs(fg - fp[i_min]) <= self.T2:
-                    print('Stopping search: Swarm best objective change less than {:}' \
-                          .format(self.T2))
+                    self.iterations = it
                     self.x_hist = self.x_hist[:it]
                     self.v_hist = self.v_hist[:it]
                     self.min_cost_function = self.min_cost_function[:it]
                     self.avg_cost_function = self.avg_cost_function[:it]
+                # else if swarm best position change is too small
                 elif self.CONVERGENCE and stepsize <= self.T1:
-                    print('Stopping search: Swarm best position change less than {:}' \
-                          .format(self.T1))
+                    self.iterations = it
                     self.x_hist = self.x_hist[:it]
                     self.v_hist = self.v_hist[:it]
                     self.min_cost_function = self.min_cost_function[:it]
                     self.avg_cost_function = self.avg_cost_function[:it]
+                # else do not converge early and iterate again
                 else:
                     g = p_min.copy()
                     fg = fp[i_min]
@@ -268,7 +278,7 @@ class PSO():
         plt.ylabel('Cost')
         plt.title(label + ' Cost Function')
         self.line, = ax1.plot([], [], lw=3)
-        self.ani = animation.FuncAnimation(fig, self.animate, np.arange(0, self.stop),
+        self.ani = animation.FuncAnimation(fig, self.animate, frames=self.iterations,
                                            fargs=[indices, self.data, self.line], interval=20, blit=True)
         plt.show()
 
