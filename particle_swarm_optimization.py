@@ -372,8 +372,7 @@ class PSO():
             for lnum, line in enumerate(lines):
                 data = self.xs[i - 5:i, lnum, :]
                 line[0].set_data(data[:, 0], data[:, 1])
-        #self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],
-                                               scale=50)
+        #self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],scale=50)
         return (scatters, self.contour_vectors),
 
     def animate3D(self, positions, velocities):
