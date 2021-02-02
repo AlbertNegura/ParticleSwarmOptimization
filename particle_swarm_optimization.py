@@ -140,7 +140,10 @@ class PSO():
 
         return z
 
-    def pso(self):
+    def gradient_descent(self):
+        x=1
+
+    def particle_swarm_optimization(self):
         # global mp_pool
         # global swarmsize
         # global x_hist,v_hist,min_cost_function,avg_cost_function
