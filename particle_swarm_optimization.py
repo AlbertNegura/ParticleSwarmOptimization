@@ -366,14 +366,14 @@ class PSO():
         plot_data = self.xs[i]
         v_plot_data = self.vs[i]
 
-        self.contour_vectors.remove()
+        #self.contour_vectors.remove()
         scatters.set_offsets(plot_data)
         if i > 5:
             for lnum, line in enumerate(lines):
                 data = self.xs[i - 5:i, lnum, :]
                 line[0].set_data(data[:, 0], data[:, 1])
         #self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],scale=50)
-        return (scatters, self.contour_vectors),
+        return scatters,
 
     def animate3D(self, positions, velocities):
         # global ax3, xs, vs, stop, ani3, fig3, vectors, scale_factor
@@ -431,7 +431,7 @@ class PSO():
             v_plot_data = self.vs[i]
             z_Xs = self.error_plot(plot_data[:])
 
-            self.vectors.remove()
+            #self.vectors.remove()
             if i > 5:
                 for lnum, line in enumerate(lines):
                     data = self.xs[i - 5:i, lnum, :]
@@ -440,7 +440,7 @@ class PSO():
                     line[0].set_3d_properties(function_data)
             scatters._offsets3d = (plot_data[:, 0], plot_data[:, 1], z_Xs)
             #self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,z_Xs * self.scale_factor)
-        return (scatters, self.vectors),
+        return scatters,
 
 
 if __name__ == '__main__':
