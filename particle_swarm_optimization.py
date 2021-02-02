@@ -14,8 +14,7 @@ from functools import partial
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from mpl_toolkits.mplot3d import axes3d
-
+from matplotlib.widgets import Slider, Button, RadioButtons
 matplotlib.use("TkAgg")
 # config parser for .ini
 import configparser
@@ -351,7 +350,7 @@ class PSO():
         zs = np.array(self.function_of(np.ravel(X), np.ravel(Y)))
         Z = zs.reshape(X.shape)
 
-        self.CS = ax.contour(X, Y, Z, cmap='viridis')
+        self.CS = ax.contour(X, Y, Z, levels = 20, cmap='viridis')
         ax.title.set_text("2D Contour Plot of Objective Function")
 
         Xs = self.xs[0]
@@ -459,17 +458,5 @@ class PSO():
 if __name__ == '__main__':
     pso = PSO()
     pso.particle_swarm_optimization()
-    # print(x_hist)
-    # print(v_hist)
-    # plt.plot(min_cost_function)
-    # plt.ylabel("Cost")
-    # plt.xlabel("Iterations")
-    # plt.title("Min cost function")
-    # plt.show()
-    # plt.plot(avg_cost_function)
-    # plt.ylabel("Cost")
-    # plt.xlabel("Iterations")
-    # plt.title("Average cost function")
-    # plt.show()
 
     pso.plot_all()
