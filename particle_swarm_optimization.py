@@ -105,6 +105,7 @@ class PSO():
         self.v_hist = np.zeros((self.iterations, self.swarmsize, 2))
         self.avg_cost_function = np.zeros((self.iterations))
         self.min_cost_function = np.zeros((self.iterations))
+        self.ani_list = [animation.FuncAnimation, animation.FuncAnimation]
 
         self.lower_bounds = [0, 0]
         self.upper_bounds = [10, 10]
@@ -284,36 +285,49 @@ class PSO():
             it += 1
 
     # --- PLOTTING---------------------------------------------------+
-    def animate2D(self, data_used, label):
-        # global ax1, data, line, stop, ani
-        self.data = data_used.copy()
-        self.stop = np.size(self.data)
-        indices = np.linspace(0, self.stop, self.stop - 1)
-        fig = plt.figure()
-        ax1 = plt.axes(xlim=[0, self.stop], ylim=[np.min(self.data), np.max(self.data)])
-        plt.xlabel('Iterations')
-        plt.ylabel('Cost')
-        plt.title(label + ' Cost Function')
-        self.line, = ax1.plot([], [], lw=3)
-        self.ani = animation.FuncAnimation(fig, self.animate, frames=self.iterations,
-                                           fargs=[indices, self.data, self.line], interval=20, blit=True)
+    def plot_all(self):
+        from multiprocessing import Process
+        fig, ((ax1,ax2), (ax3, ax4)) = plt.subplots(2, 2, sharex=False, sharey=False)
+        fig.set_figheight(15)
+        fig.set_figwidth(15)
+        p1 = Process(pso.animate2D(self.min_cost_function, "Min", fig, ax1, 1))
+        p1.start()
+        p2 = Process(pso.animate2D(self.avg_cost_function, "Average", fig, ax2, 2))
+        p2.start()
+        p3 = Process(pso.animate_contour(self.x_hist, self.v_hist, fig, ax3))
+        p3.start()
+        p4 = Process(pso.animate3D(self.x_hist, self.v_hist, fig, ax4))
+        p4.start()
         plt.show()
 
-    def animate(self, i, x, y, line):
+    def animate2D(self, data_used, label, fig, ax1, ax):
+        self.data = data_used.copy()
+        self.stop = np.size(self.data)
+        ax1.set(xlim=[0, self.stop], ylim=[np.min(self.data), np.max(self.data)])
+        ax1.tick_params(axis='x', labelbottom=False)
+        ax1.tick_params(axis='y', labelleft=False)
+        indices = np.linspace(0, self.stop, self.stop - 1)
+        axis = fig.add_subplot(2,2,ax)
+        #ax.xlabel.set_text('Iterations')
+        #ax.ylabel.set_text('Cost')
+        axis.title.set_text(label + ' Cost Function')
+        axis.plot(self.data, lw=3)
+        #line, = axis.plot([], [], lw=3)
+        #self.ani_list[ax-1] = (animation.FuncAnimation(fig, self.animate, frames=self.iterations,fargs=[indices, self.data, line, ax], interval=20, blit=True))
+
+    def animate(self, i, x, y, line, ax):
         if i >= self.stop - 1:
-            self.ani.event_source.stop()
+            self.ani_list[ax-1].event_source.stop()
         line.set_data(x[:i], y[:i])
-        line.axes.axis([0, np.size(self.data), np.min(self.data), np.max(self.data)])
+        #line.axes.axis([0, np.size(self.data), np.min(self.data), np.max(self.data)])
         return line,
 
-    def animate_contour(self, positions, velocities):
-        # global ax2, xs, vs, stop, ani, fig, contour_vectors
+    def animate_contour(self, positions, velocities, fig, ax):
         self.xs = positions.copy()
         self.vs = velocities.copy()
 
-        fig = plt.figure()
         self.stop = self.xs.shape[0]
-        self.ax2 = plt.axes(xlim=[np.min(self.lower_bounds), np.max(self.upper_bounds)],
+        ax.set(xlim=[np.min(self.lower_bounds), np.max(self.upper_bounds)],
                             ylim=[np.min(self.lower_bounds), np.max(self.upper_bounds)])
 
         if np.max(self.upper_bounds) > 0 and np.min(self.lower_bounds) < 0:
@@ -337,8 +351,8 @@ class PSO():
         zs = np.array(self.function_of(np.ravel(X), np.ravel(Y)))
         Z = zs.reshape(X.shape)
 
-        self.CS = self.ax2.contour(X, Y, Z, cmap='viridis')
-        plt.title("2D Contour Plot of Objective Function")
+        self.CS = ax.contour(X, Y, Z, cmap='viridis')
+        ax.title.set_text("2D Contour Plot of Objective Function")
 
         Xs = self.xs[0]
         x_Xs = Xs[:, 0]
@@ -349,21 +363,20 @@ class PSO():
 
         cmap = rand_cmap(self.swarmsize)
         if len(self.goal) == 2:
-            goal_scatter = self.ax2.scatter(self.goal[0], self.goal[1], s=self.swarmsize * 10, marker="x")
+            goal_scatter = ax.scatter(self.goal[0], self.goal[1], s=self.swarmsize * 10, marker="x")
         else:
             goal_x = self.goal[:, 0]
             goal_y = self.goal[:, 1]
-            goal_scatter = self.ax2.scatter(goal_x, goal_y, s=self.swarmsize * 10, marker="x")
-        scatters = self.ax2.scatter(x_Xs, y_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o", vmin=0,
+            goal_scatter = ax.scatter(goal_x, goal_y, s=self.swarmsize * 10, marker="x")
+        scatters = ax.scatter(x_Xs, y_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o", vmin=0,
                                     vmax=self.swarmsize)
         # self.contour_vectors = self.ax2.quiver(x_Xs, y_Xs, x_Vs, y_Vs, scale=50)
         lines = []
         for i in range(self.swarmsize):
-            line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.3)
+            line = ax.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.3)
             lines.append(line)
         self.ani2 = animation.FuncAnimation(fig, self.animate2, frames=self.iterations, fargs=[scatters, lines],
-                                            interval=50, blit=False, repeat=True)
-        plt.show()
+                                            interval=100, blit=False, repeat=True)
 
     def animate2(self, i, scatters, lines):
         # global contour_vectors
@@ -379,21 +392,19 @@ class PSO():
         # self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],scale=50)
         return scatters,
 
-    def animate3D(self, positions, velocities):
-        # global ax3, xs, vs, stop, ani3, fig3, vectors, scale_factor
+    def animate3D(self, positions, velocities, fig, ax):
         self.xs = positions.copy()
         self.vs = velocities.copy()
 
-        fig3 = plt.figure()
-        self.ax3 = axes3d.Axes3D(fig3)
+        ax = fig.add_subplot(2,2,4, projection='3d')
         x = np.arange(np.min(self.lower_bounds), np.max(self.upper_bounds), 0.05)
         y = np.arange(np.min(self.lower_bounds), np.max(self.upper_bounds), 0.05)
         X, Y = np.meshgrid(x, y)
         zs = np.array(self.function_of(np.ravel(X), np.ravel(Y)))
         Z = zs.reshape(X.shape)
 
-        self.ax3.plot_surface(X, Y, Z, cmap='gray', edgecolor='none', alpha=0.2)
-        plt.title("3D Plot of Objective Function")
+        ax.plot_surface(X, Y, Z, cmap='gray', edgecolor='none', alpha=0.2)
+        ax.title.set_text("3D Plot of Objective Function")
 
         self.stop = self.xs.shape[0]
         # self.scale_factor /= self.stop
@@ -408,27 +419,25 @@ class PSO():
 
         if len(self.goal) == 2:
             goal_z = self.error_plot(np.array([self.goal]))
-            goal_scatter = self.ax3.scatter(self.goal[0], self.goal[1], goal_z, s=self.swarmsize * 10, marker="x")
+            goal_scatter = ax.scatter(self.goal[0], self.goal[1], goal_z, s=self.swarmsize * 10, marker="x")
         else:
             goal_x = self.goal[:, 0]
             goal_y = self.goal[:, 1]
             goal_z = self.error_plot(np.array(self.goal))
-            goal_scatter = self.ax3.scatter(goal_x, goal_y, goal_z, s=self.swarmsize * 10, marker="x")
+            goal_scatter = ax.scatter(goal_x, goal_y, goal_z, s=self.swarmsize * 10, marker="x")
 
         cmap = rand_cmap(self.swarmsize)
-        scatters = self.ax3.scatter(x_Xs, y_Xs, z_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",
+        scatters = ax.scatter(x_Xs, y_Xs, z_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",
                                     vmin=0, vmax=self.swarmsize)
         # self.vectors = self.ax3.quiver(x_Xs, y_Xs, z_Xs, x_Vs, y_Vs, z_Vs)
         lines = []
         for i in range(self.swarmsize):
-            line = self.ax3.plot(self.xs[0, i, 0], self.xs[0, i, 1], z_Xs[i], c=cmap(i), alpha=0.5)
+            line = ax.plot(self.xs[0, i, 0], self.xs[0, i, 1], z_Xs[i], c=cmap(i), alpha=0.5)
             lines.append(line)
 
-        self.ani3 = animation.FuncAnimation(fig3, self.animate3, frames=self.iterations, fargs=[scatters, lines],
+        self.ani3 = animation.FuncAnimation(fig, self.animate3, frames=self.iterations, fargs=[scatters, lines],
                                             interval=100,
                                             blit=False, repeat=True)
-        plt.show()
-
     def animate3(self, i, scatters, lines):
         # global vectors, scale_factor
         plot_data = self.xs[i]
@@ -463,7 +472,4 @@ if __name__ == '__main__':
     # plt.title("Average cost function")
     # plt.show()
 
-    pso.animate2D(pso.min_cost_function, "Min")
-    pso.animate2D(pso.avg_cost_function, "Average")
-    pso.animate_contour(pso.x_hist, pso.v_hist)
-    pso.animate3D(pso.x_hist, pso.v_hist)
+    pso.plot_all()
