@@ -1,11 +1,11 @@
-#---------------------------------------------------------------+
+# ---------------------------------------------------------------+
 #
 #   Albert Negura
 #   2-Dimensional Particle Swarm Optimization (PSO) with Python
 #   February, 2021
 #
-#---------------------------------------------------------------+
-#--- IMPORT DEPENDENCIES----------------------------------------+
+# ---------------------------------------------------------------+
+# --- IMPORT DEPENDENCIES----------------------------------------+
 # mathematics / algorithm imports
 import math
 import numpy as np
@@ -15,38 +15,59 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import axes3d
+
 matplotlib.use("TkAgg")
 # config parser for .ini
 import configparser
 
 
-#--- PSO CLASS--------------------------------------------------+
-class PSO():
+# --- PSO CLASS--------------------------------------------------+
+def rand_cmap(nlabels):
+    from matplotlib.colors import LinearSegmentedColormap
+    import colorsys
+    import numpy as np
 
-    #config-adjustable parameters
+    # Generate color map for bright colors, based on hsv
+    randHSVcolors = [(np.random.uniform(low=0.0, high=1),
+                      np.random.uniform(low=0.2, high=1),
+                      np.random.uniform(low=0.9, high=1)) for i in range(nlabels)]
+
+    # Convert HSV list to RGB
+    randRGBcolors = []
+    for HSVcolor in randHSVcolors:
+        randRGBcolors.append(colorsys.hsv_to_rgb(HSVcolor[0], HSVcolor[1], HSVcolor[2]))
+
+    random_colormap = LinearSegmentedColormap.from_list('new_map', randRGBcolors, N=nlabels)
+
+    return random_colormap
+
+
+class PSO():
+    # config-adjustable parameters
     swarmsize = None
     iterations = None
-    omega = None #inertia
-    c1 = None #cognitive constant
-    c2 = None #social constant
+    omega = None  # inertia
+    c1 = None  # cognitive constant
+    c2 = None  # social constant
     T1 = None
     T2 = None
     CONVERGENCE = None
     PROCESSES = None
     mp_pool = None
 
-    #function selector (6 implemented functions)
+    # function selector (6 implemented functions)
     function = None
     lower_bounds = None
     upper_bounds = None
     goal = None
 
-    #plotting lists
+    # plotting lists
     x_hist = None
     v_hist = None
     avg_cost_function = None
     min_cost_function = None
-    #scale_factor = None
+
+    # scale_factor = None
 
     def __init__(self, mode='config', swarmsize=100, iterations=100, omega=0.5, c1=0.5, c2=0.5,
                  T1=1e-10, T2=1e-10, CONVERGENCE=False, PROCESSES=1, function=0):
@@ -66,17 +87,17 @@ class PSO():
 
             config = configparser.ConfigParser()
             config.read('config.ini')
-            pso = config['pso']
+            pso_config = config['pso']
 
-            self.swarmsize = pso.getint("swarm_size")
-            self.iterations = pso.getint("maximum_iterations")
-            self.omega = pso.getfloat("inertia")
-            self.c1 = pso.getfloat("cognitive_constant")
-            self.c2 = pso.getfloat("social_constant")
-            self.T1 = pso.getfloat("step_convergence_threshold")
-            self.T2 = pso.getfloat("value_convergence_threshold")
-            self.CONVERGENCE = pso.getboolean("converge_early")
-            self.PROCESSES = pso.getint("PROCESSES")
+            self.swarmsize = pso_config.getint("swarm_size")
+            self.iterations = pso_config.getint("maximum_iterations")
+            self.omega = pso_config.getfloat("inertia")
+            self.c1 = pso_config.getfloat("cognitive_constant")
+            self.c2 = pso_config.getfloat("social_constant")
+            self.T1 = pso_config.getfloat("step_convergence_threshold")
+            self.T2 = pso_config.getfloat("value_convergence_threshold")
+            self.CONVERGENCE = pso_config.getboolean("converge_early")
+            self.PROCESSES = pso_config.getint("PROCESSES")
 
             self.function = config['functions'].getint("function_selection")
 
@@ -88,7 +109,7 @@ class PSO():
         self.lower_bounds = [0, 0]
         self.upper_bounds = [10, 10]
 
-        #initialize upper, lower bound and global minimum based on the function selector
+        # initialize upper, lower bound and global minimum based on the function selector
         if self.function == 0:
             self.lower_bounds = [0, 0]
             self.upper_bounds = [10, 10]
@@ -114,19 +135,19 @@ class PSO():
             self.upper_bounds = [10, 10]
             self.goal = [1, 1]
 
-        #self.scale_factor = np.abs((np.max(self.upper_bounds) - np.min(self.lower_bounds))) * 2
+        # self.scale_factor = np.abs((np.max(self.upper_bounds) - np.min(self.lower_bounds))) * 2
 
     # --- COST FUNCTION----------------------------------------------+
     def error(self, x):
         x1 = x[0]
         x2 = x[1]
-        if self.function == 0:
+        if self.function == 0:  # alpine n.2
             return -(np.sqrt(np.abs(x1)) * np.sin(x1) * np.sqrt(np.abs(x2)) * np.sin(x2))
-        elif self.function == 1:
+        elif self.function == 1:  # beale
             return (1.5 - x1 + x1 * x2) ** 2 + (2.25 - x1 + x1 * x2 ** 2) ** 2 + (2.625 - x1 + x1 * x2 ** 3) ** 2
-        elif self.function == 2:
+        elif self.function == 2:  # bird
             return np.sin(x1) * np.exp((1 - np.cos(x2)) ** 2) + np.cos(x2) * np.exp((1 - np.sin(x1)) ** 2)
-        elif self.function == 3:
+        elif self.function == 3:  # drop-wave
             return -(1 + np.cos(12 * np.sqrt(x1 ** 2 + x2 ** 2))) / (0.5 * (x1 ** 2 + x2 ** 2) + 2)
         elif self.function == 4:  # rastrigin
             return (x1 ** 2 - 10 * np.cos(math.pi * 2 * x1 ** 2)) + (x2 ** 2 - 10 * np.cos(math.pi * 2 * x2 ** 2))
@@ -148,7 +169,7 @@ class PSO():
 
     # --- ALGORITHMS-------------------------------------------------+
     def gradient_descent(self):
-        x=1
+        x = 1
 
     def particle_swarm_optimization(self):
         # local copies of bounds for shorter calls
@@ -157,8 +178,8 @@ class PSO():
         assert np.all(ub > lb), 'All upper bound values must be greater than the corresponding lower bound values'
 
         # set lower and upper bounds to velocities based on position bounds
-        upperV = np.abs(ub - lb)
-        lowerV = -upperV
+        upper_bound_velocity = np.abs(ub - lb)
+        lower_bound_velocity = -upper_bound_velocity
 
         objective = self.error
 
@@ -167,12 +188,12 @@ class PSO():
             mp_pool = multiprocessing.Pool(self.PROCESSES)
 
         # initialize a few arrays
-        positions = np.random.rand(self.swarmsize, 2) # particle position
-        best_positions = np.zeros_like(positions) # best known position per particle
-        objectives = np.zeros(self.swarmsize) # objective function value per particle
-        best_objectives = np.ones(self.swarmsize) * np.inf # best particle position objective function value
-        best_swarm_positions =[]
-        best_swarm_objective = np.inf # best swarm position
+        positions = np.random.rand(self.swarmsize, 2)  # particle position
+        best_positions = np.zeros_like(positions)  # best known position per particle
+        objectives = np.zeros(self.swarmsize)  # objective function value per particle
+        best_objectives = np.ones(self.swarmsize) * np.inf  # best particle position objective function value
+        best_swarm_positions = []
+        best_swarm_objective = np.inf  # best swarm position
 
         # initialize particle positions randomly in the function bounds
         positions = lb + positions * (ub - lb)
@@ -182,24 +203,25 @@ class PSO():
             objectives = np.array(self.mp_pool.map(objective, positions))
         else:
             for i in range(self.swarmsize):
-                objectives[i] = objective(positions[i, :]) #calculate objective function
+                objectives[i] = objective(positions[i, :])  # calculate objective function
 
-        i_update = objectives < best_objectives #selector to decide which particles to update
+        i_update = objectives < best_objectives  # selector to decide which particles to update
         best_positions[i_update, :] = positions[i_update, :].copy()
-        best_objectives[i_update] = objectives[i_update] #best particle position
+        best_objectives[i_update] = objectives[i_update]  # best particle position
 
         # index of best particle
         i_min = np.argmin(best_objectives)
-        if best_objectives[i_min] < best_swarm_objective: #if the best particle is in a better position than all other particles
+        if best_objectives[i_min] < best_swarm_objective:  # if the best particle is in a better position than all other particles
             best_objective = best_objectives[i_min]
-            best_swarm_positions = best_positions[i_min, :].copy() #best known swarm position
+            best_swarm_positions = best_positions[i_min, :].copy()  # best known swarm position
         else:
-            best_swarm_positions = positions[0, :].copy() #best known swarm position
+            best_swarm_positions = positions[0, :].copy()  # best known swarm position
 
         # calculate initial velocity vector
-        velocities = lowerV + np.random.rand(self.swarmsize, 2) * (upperV - lowerV)
+        velocities = lower_bound_velocity + np.random.rand(self.swarmsize, 2) * (
+                upper_bound_velocity - lower_bound_velocity)
 
-        #iterate over self.iterations
+        # iterate over self.iterations
         it = 1
         while it <= self.iterations:
             # add position/velocity of all particles to history array for plotting
@@ -208,7 +230,8 @@ class PSO():
             # update velocity vector with slight randomization to approach minimum
             rp = np.random.uniform(size=(self.swarmsize, 2))
             rg = np.random.uniform(size=(self.swarmsize, 2))
-            velocities = self.omega * velocities + self.c1 * rp * (best_positions - positions) + self.c2 * rg * (best_swarm_positions - positions)
+            velocities = self.omega * velocities + self.c1 * rp * (best_positions - positions) + self.c2 * rg * (
+                    best_swarm_positions - positions)
             # update position vector
             positions = positions + velocities
 
@@ -232,8 +255,8 @@ class PSO():
 
             # compare swarm best position with global best position
             i_min = np.argmin(best_objectives)
-            self.min_cost_function[it - 1] = best_objectives[i_min] # min cost function for plotting
-            self.avg_cost_function[it - 1] = np.average(best_objectives) # average cost function for plotting
+            self.min_cost_function[it - 1] = best_objectives[i_min]  # min cost function for plotting
+            self.avg_cost_function[it - 1] = np.average(best_objectives)  # average cost function for plotting
             if best_objectives[i_min] < best_swarm_objective:
 
                 best_particle_position = best_positions[i_min, :].copy()
@@ -277,30 +300,11 @@ class PSO():
         plt.show()
 
     def animate(self, i, x, y, line):
-        if (i >= self.stop - 1):
+        if i >= self.stop - 1:
             self.ani.event_source.stop()
         line.set_data(x[:i], y[:i])
         line.axes.axis([0, np.size(self.data), np.min(self.data), np.max(self.data)])
         return line,
-
-    def rand_cmap(self, nlabels):
-        from matplotlib.colors import LinearSegmentedColormap
-        import colorsys
-        import numpy as np
-
-        # Generate color map for bright colors, based on hsv
-        randHSVcolors = [(np.random.uniform(low=0.0, high=1),
-                          np.random.uniform(low=0.2, high=1),
-                          np.random.uniform(low=0.9, high=1)) for i in range(nlabels)]
-
-        # Convert HSV list to RGB
-        randRGBcolors = []
-        for HSVcolor in randHSVcolors:
-            randRGBcolors.append(colorsys.hsv_to_rgb(HSVcolor[0], HSVcolor[1], HSVcolor[2]))
-
-        random_colormap = LinearSegmentedColormap.from_list('new_map', randRGBcolors, N=nlabels)
-
-        return random_colormap
 
     def animate_contour(self, positions, velocities):
         # global ax2, xs, vs, stop, ani, fig, contour_vectors
@@ -343,7 +347,7 @@ class PSO():
         x_Vs = Vs[:, 0]
         y_Vs = Vs[:, 1]
 
-        cmap = self.rand_cmap(self.swarmsize)
+        cmap = rand_cmap(self.swarmsize)
         if len(self.goal) == 2:
             goal_scatter = self.ax2.scatter(self.goal[0], self.goal[1], s=self.swarmsize * 10, marker="x")
         else:
@@ -352,7 +356,7 @@ class PSO():
             goal_scatter = self.ax2.scatter(goal_x, goal_y, s=self.swarmsize * 10, marker="x")
         scatters = self.ax2.scatter(x_Xs, y_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o", vmin=0,
                                     vmax=self.swarmsize)
-        #self.contour_vectors = self.ax2.quiver(x_Xs, y_Xs, x_Vs, y_Vs, scale=50)
+        # self.contour_vectors = self.ax2.quiver(x_Xs, y_Xs, x_Vs, y_Vs, scale=50)
         lines = []
         for i in range(self.swarmsize):
             line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.3)
@@ -366,13 +370,13 @@ class PSO():
         plot_data = self.xs[i]
         v_plot_data = self.vs[i]
 
-        #self.contour_vectors.remove()
+        # self.contour_vectors.remove()
         scatters.set_offsets(plot_data)
         if i > 5:
             for lnum, line in enumerate(lines):
                 data = self.xs[i - 5:i, lnum, :]
                 line[0].set_data(data[:, 0], data[:, 1])
-        #self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],scale=50)
+        # self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],scale=50)
         return scatters,
 
     def animate3D(self, positions, velocities):
@@ -392,15 +396,15 @@ class PSO():
         plt.title("3D Plot of Objective Function")
 
         self.stop = self.xs.shape[0]
-        #self.scale_factor /= self.stop
+        # self.scale_factor /= self.stop
         Xs = self.xs[0]
         x_Xs = Xs[:, 0]
         y_Xs = Xs[:, 1]
         z_Xs = self.error_plot(Xs[:, :])
         Vs = self.vs[0]
-        x_Vs = Vs[:, 0]# * self.scale_factor
-        y_Vs = Vs[:, 1]# * self.scale_factor
-        z_Vs = self.error_plot(Vs[:, :])# * self.scale_factor
+        x_Vs = Vs[:, 0]  # * self.scale_factor
+        y_Vs = Vs[:, 1]  # * self.scale_factor
+        z_Vs = self.error_plot(Vs[:, :])  # * self.scale_factor
 
         if len(self.goal) == 2:
             goal_z = self.error_plot(np.array([self.goal]))
@@ -411,16 +415,17 @@ class PSO():
             goal_z = self.error_plot(np.array(self.goal))
             goal_scatter = self.ax3.scatter(goal_x, goal_y, goal_z, s=self.swarmsize * 10, marker="x")
 
-        cmap = self.rand_cmap(self.swarmsize)
+        cmap = rand_cmap(self.swarmsize)
         scatters = self.ax3.scatter(x_Xs, y_Xs, z_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",
                                     vmin=0, vmax=self.swarmsize)
-        #self.vectors = self.ax3.quiver(x_Xs, y_Xs, z_Xs, x_Vs, y_Vs, z_Vs)
+        # self.vectors = self.ax3.quiver(x_Xs, y_Xs, z_Xs, x_Vs, y_Vs, z_Vs)
         lines = []
         for i in range(self.swarmsize):
             line = self.ax3.plot(self.xs[0, i, 0], self.xs[0, i, 1], z_Xs[i], c=cmap(i), alpha=0.5)
             lines.append(line)
 
-        self.ani3 = animation.FuncAnimation(fig3, self.animate3, frames=self.iterations, fargs=[scatters, lines], interval=100,
+        self.ani3 = animation.FuncAnimation(fig3, self.animate3, frames=self.iterations, fargs=[scatters, lines],
+                                            interval=100,
                                             blit=False, repeat=True)
         plt.show()
 
@@ -430,7 +435,7 @@ class PSO():
         v_plot_data = self.vs[i]
         z_Xs = self.error_plot(plot_data[:])
 
-        #self.vectors.remove()
+        # self.vectors.remove()
         if i > 5:
             for lnum, line in enumerate(lines):
                 data = self.xs[i - 5:i, lnum, :]
@@ -438,7 +443,7 @@ class PSO():
                 line[0].set_data(data[:, 0], data[:, 1])
                 line[0].set_3d_properties(function_data)
         scatters._offsets3d = (plot_data[:, 0], plot_data[:, 1], z_Xs)
-        #self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,z_Xs * self.scale_factor)
+        # self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,z_Xs * self.scale_factor)
         return scatters,
 
 
