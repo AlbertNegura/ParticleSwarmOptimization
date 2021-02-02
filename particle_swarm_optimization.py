@@ -1,11 +1,11 @@
-#---------------------------------------------------------+
+#---------------------------------------------------------------+
 #
 #   Albert Negura
-#   Particle Swarm Optimization (PSO) with Python
+#   2-Dimensional Particle Swarm Optimization (PSO) with Python
 #   February, 2021
 #
-#---------------------------------------------------------+
-#--- IMPORT DEPENDENCIES----------------------------------+
+#---------------------------------------------------------------+
+#--- IMPORT DEPENDENCIES----------------------------------------+
 # mathematics / algorithm imports
 import math
 import numpy as np
@@ -20,7 +20,7 @@ matplotlib.use("TkAgg")
 import configparser
 
 
-#--- PSO CLASS--------------------------------------------+
+#--- PSO CLASS--------------------------------------------------+
 class PSO():
     args = []
     kwargs = {}
@@ -91,6 +91,7 @@ class PSO():
         self.lower_bounds = [0, 0]
         self.upper_bounds = [10, 10]
 
+        #initialize upper, lower bound and global minimum based on the function selector
         if self.function == 0:
             self.lower_bounds = [0, 0]
             self.upper_bounds = [10, 10]
@@ -118,6 +119,7 @@ class PSO():
 
         self.scale_factor = np.abs((np.max(self.upper_bounds) - np.min(self.lower_bounds))) * 2
 
+    # --- COST FUNCTION----------------------------------------------+
     def _obj_wrapper(self, func, args, kwargs, x):
         return func(x, *args, **kwargs)
 
@@ -150,6 +152,7 @@ class PSO():
 
         return z
 
+    # --- ALGORITHMS-------------------------------------------------+
     def gradient_descent(self):
         x=1
 
@@ -261,6 +264,7 @@ class PSO():
                     fg = fp[i_min]
             it += 1
 
+    # --- PLOTTING---------------------------------------------------+
     def animate2D(self, data_used, label):
         # global ax1, data, line, stop, ani
         self.data = data_used.copy()
