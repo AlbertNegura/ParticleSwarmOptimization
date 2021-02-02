@@ -38,6 +38,7 @@ class PSO():
 
     lower_bounds = None
     upper_bounds = None
+    goal = None
 
     scale_factor = None
 
@@ -87,15 +88,27 @@ class PSO():
         if self.function == 0:
             self.lower_bounds = [0, 0]
             self.upper_bounds = [10, 10]
+            self.goal = [7.917,7.917]
         elif self.function == 1:
             self.lower_bounds = [-4.5, -4.5]
             self.upper_bounds = [4.5, 4.5]
+            self.goal = [3,0.5]
         elif self.function == 2:
             self.lower_bounds = [-2*math.pi, -2*math.pi]
             self.upper_bounds = [2*math.pi, 2*math.pi]
+            self.goal = [[4.70104,3.15294],[-1.58214,-3.13024]]
         elif self.function == 3:
             self.lower_bounds = [-5.2, -5.2]
             self.upper_bounds = [5.2, 5.2]
+            self.goal = [0,0]
+        elif self.function == 4:
+            self.lower_bounds = [-5.12, -5.12]
+            self.upper_bounds = [5.12, 5.12]
+            self.goal = [0,0]
+        elif self.function == 5:
+            self.lower_bounds = [-5, -5]
+            self.upper_bounds = [10, 10]
+            self.goal = [1,1]
 
         self.scale_factor = np.abs((np.max(self.upper_bounds)-np.min(self.lower_bounds)))*2
 
@@ -114,6 +127,10 @@ class PSO():
             return np.sin(x1)*np.exp((1-np.cos(x2))**2) + np.cos(x2)*np.exp((1-np.sin(x1))**2)
         elif self.function == 3:
             return -(1+np.cos(12*np.sqrt(x1**2+x2**2)))/(0.5*(x1**2+x2**2)+2)
+        elif self.function == 4: #rastrigin
+            return (x1**2 - 10*np.cos(math.pi*2*x1**2)) + (x2**2 - 10*np.cos(math.pi*2*x2**2))
+        elif self.function == 5: #rosenbrock a=0,b=1
+            return (x2-x1**2)**2 + x1**2
         else:
             return - (np.sqrt(x1)*np.sin(x1)*np.sqrt(x2)*np.sin(x2))
 
@@ -371,12 +388,19 @@ class PSO():
         y_Vs = Vs[:,1]
 
 
+
         cmap = self.rand_cmap(self.swarmsize)
+        if len(self.goal)==2:
+            goal_scatter = self.ax2.scatter(self.goal[0],self.goal[1], s=self.swarmsize*10, marker="x")
+        else:
+            goal_x = self.goal[:,0]
+            goal_y = self.goal[:,1]
+            goal_scatter = self.ax2.scatter(goal_x, goal_y, s=self.swarmsize*10, marker="x")
         scatters = self.ax2.scatter(x_Xs,y_Xs,c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",vmin = 0, vmax = self.swarmsize)
         self.contour_vectors = self.ax2.quiver(x_Xs,y_Xs,x_Vs,y_Vs, scale=50)
         lines = []
         for i in range(self.swarmsize):
-            line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.2)
+            line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.3)
             lines.append(line)
         self.ani2 = animation.FuncAnimation(fig, self.animate2, np.arange(0,self.stop-2), fargs=[scatters, lines], interval=50, blit=False, repeat=True)
         plt.show()
@@ -388,9 +412,9 @@ class PSO():
 
         self.contour_vectors.remove()
         scatters.set_offsets(plot_data)
-        if i > 1:
+        if i > 5:
             for lnum,line in enumerate(lines):
-                data = self.xs[:i,lnum,:]
+                data = self.xs[i-5:i,lnum,:]
                 line[0].set_data(data[:,0],data[:,1])
         self.contour_vectors = self.ax2.quiver(plot_data[:,0],plot_data[:,1],v_plot_data[:,0],v_plot_data[:,1],scale=50)
         return (scatters, self.contour_vectors),
@@ -422,6 +446,15 @@ class PSO():
         y_Vs = Vs[:,1]*self.scale_factor
         z_Vs = self.error_plot(Vs[:,:])*self.scale_factor
 
+        if len(self.goal) == 2:
+            goal_z = self.error_plot(np.array([self.goal]))
+            goal_scatter = self.ax3.scatter(self.goal[0], self.goal[1], goal_z, s=self.swarmsize * 10, marker="x")
+        else:
+            goal_x = self.goal[:, 0]
+            goal_y = self.goal[:, 1]
+            goal_z = self.error_plot(np.array(self.goal))
+            goal_scatter = self.ax3.scatter(goal_x, goal_y, goal_z, s=self.swarmsize * 10, marker="x")
+
         cmap = self.rand_cmap(self.swarmsize)
         scatters = self.ax3.scatter(x_Xs,y_Xs,z_Xs,c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",vmin = 0, vmax = self.swarmsize)
         self.vectors = self.ax3.quiver(x_Xs,y_Xs,z_Xs,x_Vs,y_Vs,z_Vs)
@@ -441,9 +474,9 @@ class PSO():
             z_Xs = self.error_plot(plot_data[:])
 
             self.vectors.remove()
-            if i > 1:
+            if i > 5:
                 for lnum,line in enumerate(lines):
-                    data = self.xs[:i,lnum,:]
+                    data = self.xs[i-5:i,lnum,:]
                     function_data = self.error_plot(data)
                     line[0].set_data(data[:,0],data[:,1])
                     line[0].set_3d_properties(function_data)
