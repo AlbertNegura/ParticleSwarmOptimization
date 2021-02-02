@@ -1,20 +1,31 @@
+#---------------------------------------------------------+
+#
+#   Albert Negura
+#   Particle Swarm Optimization (PSO) with Python
+#   February, 2021
+#
+#---------------------------------------------------------+
+#--- IMPORT DEPENDENCIES----------------------------------+
+# mathematics / algorithm imports
 import math
-
 import numpy as np
-import configparser
 from functools import partial
+# matplotlib for plotting
 import matplotlib
-
-matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import axes3d
+matplotlib.use("TkAgg")
+# config parser for .ini
+import configparser
 
 
+#--- PSO CLASS--------------------------------------------+
 class PSO():
     args = []
     kwargs = {}
 
+    #config-adjustable parameters
     swarmsize = None
     iterations = None
     rand_init = None
@@ -25,23 +36,22 @@ class PSO():
     T2 = None
     CONVERGENCE = None
     PROCESSES = None
-
+    #function selector (6 implemented functions)
     function = None
-
-    x_hist = None
-    v_hist = None
-    avg_cost_function = None
-    min_cost_function = None
-
     lower_bounds = None
     upper_bounds = None
     goal = None
 
+    #plotting lists
+    x_hist = None
+    v_hist = None
+    avg_cost_function = None
+    min_cost_function = None
     scale_factor = None
 
-    def __init__(self, mode='regular', swarmsize=100, iterations=100, rand_init=False, omega=0.5, c1=0.5, c2=0.5,
+    def __init__(self, mode='config', swarmsize=100, iterations=100, rand_init=False, omega=0.5, c1=0.5, c2=0.5,
                  T1=1e-10, T2=1e-10, CONVERGENCE=False, PROCESSES=1, function=0):
-        if mode != 'regular':
+        if mode != 'config':
             self.swarmsize = swarmsize
             self.iterations = iterations
             self.rand_init = rand_init
@@ -342,7 +352,7 @@ class PSO():
             goal_scatter = self.ax2.scatter(goal_x, goal_y, s=self.swarmsize * 10, marker="x")
         scatters = self.ax2.scatter(x_Xs, y_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o", vmin=0,
                                     vmax=self.swarmsize)
-        self.contour_vectors = self.ax2.quiver(x_Xs, y_Xs, x_Vs, y_Vs, scale=50)
+        #self.contour_vectors = self.ax2.quiver(x_Xs, y_Xs, x_Vs, y_Vs, scale=50)
         lines = []
         for i in range(self.swarmsize):
             line = self.ax2.plot(self.xs[0, i, 0], self.xs[0, i, 1], c=cmap(i), alpha=0.3)
@@ -362,7 +372,7 @@ class PSO():
             for lnum, line in enumerate(lines):
                 data = self.xs[i - 5:i, lnum, :]
                 line[0].set_data(data[:, 0], data[:, 1])
-        self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],
+        #self.contour_vectors = self.ax2.quiver(plot_data[:, 0], plot_data[:, 1], v_plot_data[:, 0], v_plot_data[:, 1],
                                                scale=50)
         return (scatters, self.contour_vectors),
 
@@ -405,7 +415,7 @@ class PSO():
         cmap = self.rand_cmap(self.swarmsize)
         scatters = self.ax3.scatter(x_Xs, y_Xs, z_Xs, c=[i for i in range(self.swarmsize)], cmap=cmap, marker="o",
                                     vmin=0, vmax=self.swarmsize)
-        self.vectors = self.ax3.quiver(x_Xs, y_Xs, z_Xs, x_Vs, y_Vs, z_Vs)
+        #self.vectors = self.ax3.quiver(x_Xs, y_Xs, z_Xs, x_Vs, y_Vs, z_Vs)
         lines = []
         for i in range(self.swarmsize):
             line = self.ax3.plot(self.xs[0, i, 0], self.xs[0, i, 1], z_Xs[i], c=cmap(i), alpha=0.5)
@@ -430,15 +440,13 @@ class PSO():
                     line[0].set_data(data[:, 0], data[:, 1])
                     line[0].set_3d_properties(function_data)
             scatters._offsets3d = (plot_data[:, 0], plot_data[:, 1], z_Xs)
-            self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,
-                                           v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,
-                                           z_Xs * self.scale_factor)
+            #self.vectors = self.ax3.quiver(plot_data[:, 0], plot_data[:, 1], z_Xs,v_plot_data[:, 0] * self.scale_factor, v_plot_data[:, 1] * self.scale_factor,z_Xs * self.scale_factor)
         return (scatters, self.vectors),
 
 
 if __name__ == '__main__':
     pso = PSO()
-    pso.pso()
+    pso.particle_swarm_optimization()
     # print(x_hist)
     # print(v_hist)
     # plt.plot(min_cost_function)
