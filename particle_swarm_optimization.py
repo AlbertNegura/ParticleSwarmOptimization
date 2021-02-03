@@ -150,7 +150,7 @@ class PSO():
         elif self.function == 3:  # drop-wave
             return -(1 + np.cos(12 * np.sqrt(x1 ** 2 + x2 ** 2))) / (0.5 * (x1 ** 2 + x2 ** 2) + 2)
         elif self.function == 4:  # rastrigin
-            return (x1 ** 2 - 10 * np.cos(math.pi * 2 * x1 ** 2)) + (x2 ** 2 - 10 * np.cos(math.pi * 2 * x2 ** 2))
+            return 20 + (x1 ** 2 - 10 * np.cos(math.pi * 2 * x1)) + (x2 ** 2 - 10 * np.cos(math.pi * 2 * x2))
         elif self.function == 5:  # rosenbrock a=0,b=1
             return (x2 - x1 ** 2) ** 2 + x1 ** 2
         else:
